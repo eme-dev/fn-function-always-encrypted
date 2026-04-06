@@ -5,6 +5,8 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.*;
+
+import com.marchena.ae.fn.model.Cliente;
 import com.microsoft.azure.functions.annotation.*;
 import com.microsoft.azure.functions.*;
 import com.marchena.ae.fn.config.JdbcConnectionProvider;
@@ -13,6 +15,10 @@ import com.marchena.ae.fn.config.JdbcConnectionProvider;
  * Azure Functions with HTTP Trigger.
  */
 public class HttpTriggerJava {
+    private static final int PART_SIZE = 4000;
+    private static final int MAX_PARTS = 5;
+    private static final int MAX_LENGTH = PART_SIZE * MAX_PARTS;
+
     /**
      * This function listens at endpoint "/api/HttpTriggerJava". Two ways to invoke it using "curl" command in bash:
      * 1. curl -d "HTTP Body" {your host}/api/HttpTriggerJava
@@ -71,19 +77,32 @@ public class HttpTriggerJava {
     }
 
     private int insertarClienteAE(String nombre, String dni) {
-        final String sql = "{call ae.InsertarClienteAE(?, ?, ?,?)}";
+        final String sql = "{call ae.InsertarClienteAE(?, ?, ?,?,?,?,?,?,?)}";
 
         try (Connection cn = JdbcConnectionProvider.getConnection();
              CallableStatement cs = cn.prepareCall(sql)) {
+            String jsonData=generateClienteJsonExactLength(15_000);
+
+            Cliente cliente= new Cliente();
+            cliente.setNombre(nombre);
+            cliente.setDni(dni);
+            assignText(cliente,jsonData);
 
             // NVARCHAR => setNString (recomendado con SQL Server + Always Encrypted)
             cs.setString(1, nombre);
             cs.setString(2, dni); // Always Encrypted cifra en el cliente
-            cs.setNString(3, generateClienteJsonExactLength(20_000));
-            cs.registerOutParameter(4, Types.INTEGER); // Parámetro OUTPUT para IdGenerado
+            cs.setNString(3, jsonData); // NVARCHAR(MAX) sin cifrar|
+            cs.setNString(4, cliente.getPart1());
+            cs.setNString(5, cliente.getPart2());
+            cs.setNString(6, cliente.getPart3());
+            cs.setNString(7, cliente.getPart4());
+            cs.setNString(8, cliente.getPart4());
+
+
+            cs.registerOutParameter(9, Types.INTEGER); // Parámetro OUTPUT para IdGenerado
             cs.execute();
             // El SP hace un SELECT al final, así que usamos execute() y leemos ResultSet
-            int idGenerado = cs.getInt(4);
+            int idGenerado = cs.getInt(9);
 
             if (cs.wasNull()) {
                 throw new SQLException(
@@ -190,5 +209,67 @@ public class HttpTriggerJava {
         if (secondQuote < 0) return null;
 
         return json.substring(firstQuote + 1, secondQuote);
+    }
+
+    private static String extraer(String texto, int numeroParte) {
+        int inicio = numeroParte * PART_SIZE;
+
+        if (inicio >= texto.length()) {
+            return null;
+        }
+
+        int fin = Math.min(inicio + PART_SIZE, texto.length());
+        return texto.substring(inicio, fin);
+    }
+
+    private static void validateCliente(Cliente cliente) {
+        if (cliente == null) {
+            throw new IllegalArgumentException("El cliente no puede ser null");
+        }
+    }
+
+    public static void assignText(Cliente cliente, String texto) {
+        validateCliente(cliente);
+
+        clearParts(cliente);
+
+        if (texto == null || texto.isEmpty()) {
+            return;
+        }
+
+        validateLength(texto);
+
+        cliente.setPart1(extractPart(texto, 0));
+        cliente.setPart2(extractPart(texto, 1));
+        cliente.setPart3(extractPart(texto, 2));
+        cliente.setPart4(extractPart(texto, 3));
+        cliente.setPart5(extractPart(texto, 4));
+    }
+    private static void clearParts(Cliente cliente) {
+        cliente.setPart1(null);
+        cliente.setPart2(null);
+        cliente.setPart3(null);
+        cliente.setPart4(null);
+        cliente.setPart5(null);
+    }
+
+    private static void validateLength(String texto) {
+        if (texto.length() > MAX_LENGTH) {
+            throw new IllegalArgumentException(
+                    "El texto supera el máximo permitido de " + MAX_LENGTH +
+                            " caracteres. Longitud actual: " + texto.length()
+            );
+        }
+    }
+
+    private static String extractPart(String texto, int partIndex) {
+        int start = partIndex * PART_SIZE;
+
+        if (start >= texto.length()) {
+            return null;
+        }
+
+        int end = Math.min(start + PART_SIZE, texto.length());
+        return texto.substring(start, end);
     }
 }
