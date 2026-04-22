@@ -91,7 +91,7 @@ public class HttpTriggerJava {
             // NVARCHAR => setNString (recomendado con SQL Server + Always Encrypted)
             cs.setString(1, nombre);
             cs.setString(2, dni); // Always Encrypted cifra en el cliente
-            cs.setNString(3, jsonData); // NVARCHAR(MAX) sin cifrar|
+            cs.setString(3, jsonData); // NVARCHAR(MAX) sin cifrar|
             cs.setNString(4, cliente.getPart1());
             cs.setNString(5, cliente.getPart2());
             cs.setNString(6, cliente.getPart3());
@@ -140,7 +140,7 @@ public class HttpTriggerJava {
                         +   "\"direccion\":{"
                         +     "\"pais\":\"PE\","
                         +     "\"ciudad\":\"Lima\","
-                        +     "\"linea1\":\"Av. Siempre Viva 123\","
+                        +     "\"linea1\":\"Av. Siempre VÓñva 123\","
                         +     "\"zip\":\"15001\""
                         +   "}"
                         + "},"
